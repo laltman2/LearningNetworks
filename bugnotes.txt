@@ -1,0 +1,6 @@
+* Initializing a network exactly at its equilibrium position (all extents = RLS) causes position evaluation to be all NaNs
+
+It seems to be okay if the Free State sets the network at its eq. position. In this case there is some rounding error
+
+
+* Over-constraining the network (all degrees of freedom specified) causes position evaluation to be all NaNs

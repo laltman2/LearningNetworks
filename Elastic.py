@@ -113,7 +113,7 @@ class Elastic():
     def free_state(self, inputpos=None, plot=False):
         # inputpos: array of shape (# sources, dim)
         # if None, keep the position(s) already in the source node object(s)
-        if inputpos:
+        if inputpos is not None:
             for ix in range(len(self.sources)):
                 self.sources[ix].position = inputpos[ix]
         
@@ -131,6 +131,44 @@ class Elastic():
         
         fixedNodes = np.concatenate(([bn.index for bn in self.boundary], [sn.index for sn in self.sources]), axis=0)
         fixedPos = np.concatenate(([bn.position for bn in self.boundary], [sn.position for sn in self.sources]), axis=0)
+        
+        params = [self.KS, self.RLS, self.EI, self.EJ, self.BIJ, self.dim, self.Epow, self.lnorm, fixed]
+        FS = np.array(FreeState_node(self.x0, params, fixedNodes, fixedPos, JErg, JXGrad))
+        
+        if plot:
+            self.plot_state(FS)
+        
+        return FS
+    
+    def clamped_state(self, inputpos=None, outputpos=None, plot=False):
+        # inputpos/outputpos: arrays of shape (# sources/targets, dim)
+        # if None, keep the position(s) already in the source/target node object(s)
+        if inputpos is not None:
+            for ix in range(len(self.sources)):
+                self.sources[ix].position = inputpos[ix]
+                
+        if outputpos is not None:
+            for ix in range(len(self.targets)):
+                self.targets[ix].position = outputpos[ix]
+        
+        fixed = []
+        for bn in self.boundary:
+            for d in range(self.dim):
+                if bn.fixed[d]:
+                    fixed.append(bn.index*self.dim + d)
+                    
+        for sn in self.sources:
+            for d in range(self.dim):
+                if sn.fixed[d]:
+                    fixed.append(sn.index*self.dim + d)
+                    
+        for tn in self.targets:
+            for d in range(self.dim):
+                if tn.fixed[d]:
+                    fixed.append(tn.index*self.dim + d)
+
+        fixedNodes = np.concatenate(([bn.index for bn in self.boundary], [sn.index for sn in self.sources], [tn.index for tn in self.targets]), axis=0)
+        fixedPos = np.concatenate(([bn.position for bn in self.boundary], [sn.position for sn in self.sources], [tn.position for sn in self.targets]), axis=0)
         
         params = [self.KS, self.RLS, self.EI, self.EJ, self.BIJ, self.dim, self.Epow, self.lnorm, fixed]
         FS = np.array(FreeState_node(self.x0, params, fixedNodes, fixedPos, JErg, JXGrad))
