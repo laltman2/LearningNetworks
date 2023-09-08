@@ -9,9 +9,9 @@ class Elastic():
     
     def __init__(self, nodes = np.array([[0.,0.], [0.,1.]]), 
                  edges = np.array([[0,1]]),
-                 boundary = [Node()],
-                 sources = [Node()],
-                 targets = [Node()]):
+                 boundary = [],
+                 sources = [],
+                 targets = []):
         # nodes: positions of all nodes of the system (including fixed points/boundaries)
         # edges: connectivity graph of shape (NE, 2) with index values of nodes
         # boundary: list of Nodes which never move
