@@ -36,8 +36,8 @@ class Elastic():
         self.BIJ = np.array(BIJ)
         
         # set initial configuration of learning degrees of freedom
-        self.RLS = np.ones(self.NE, dtype=np.float32)
-        self.KS = np.ones(self.NE, dtype=np.float32)
+        self._RLS = np.ones(self.NE, dtype=np.float32)
+        self._KS = np.ones(self.NE, dtype=np.float32)
         
         # set boundary, sources, and targets
         self.boundary = boundary
@@ -61,6 +61,26 @@ class Elastic():
         
         # initial equilibrium state
         self.x0 = self.eq_state(nodes)
+        
+    @property
+    def KS(self):
+        return self._KS
+        
+    @KS.setter
+    def KS(self, value):
+        self._KS = value
+        print('Recalculating eq state')
+        self.x0 = self.eq_state(self.x0)
+        
+    @property
+    def RLS(self):
+        return self._RLS
+        
+    @RLS.setter
+    def RLS(self, value):
+        self._RLS = value
+        print('Recalculating eq state')
+        self.x0 = self.eq_state(self.x0)
     
     def plot_state(self, pos, ax=None, save=None):
         if ax == None:
@@ -105,7 +125,7 @@ class Elastic():
         fixedNodes = np.array([bn.index for bn in self.boundary])
         fixedPos = np.array([bn.position for bn in self.boundary])
         
-        params = [self.KS, self.RLS, self.EI, self.EJ, self.BIJ, self.dim, self.Epow, self.lnorm, fixed]
+        params = [self._KS, self._RLS, self.EI, self.EJ, self.BIJ, self.dim, self.Epow, self.lnorm, fixed]
 #         print('params', params)
         computeProblem = True
         while computeProblem:
@@ -139,7 +159,7 @@ class Elastic():
         fixedNodes = np.concatenate(([bn.index for bn in self.boundary], [sn.index for sn in self.sources]), axis=0)
         fixedPos = np.concatenate(([bn.position for bn in self.boundary], [sn.position for sn in self.sources]), axis=0)
         
-        params = [self.KS, self.RLS, self.EI, self.EJ, self.BIJ, self.dim, self.Epow, self.lnorm, fixed]
+        params = [self._KS, self._RLS, self.EI, self.EJ, self.BIJ, self.dim, self.Epow, self.lnorm, fixed]
         FS = np.array(FreeState_node(self.x0, params, fixedNodes, fixedPos, JErg, JXGrad))
         
         if plot:
@@ -183,7 +203,7 @@ class Elastic():
             orderedfixed = np.array([pos for _, pos in sorted(zip(fixedNodes, fixedPos))])
             CS = orderedfixed.flatten()
         else:
-            params = [self.KS, self.RLS, self.EI, self.EJ, self.BIJ, self.dim, self.Epow, self.lnorm, fixed]
+            params = [self._KS, self._RLS, self.EI, self.EJ, self.BIJ, self.dim, self.Epow, self.lnorm, fixed]
             CS = np.array(FreeState_node(self.x0, params, fixedNodes, fixedPos, JErg, JXGrad))
         
         if plot:
