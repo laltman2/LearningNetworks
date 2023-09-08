@@ -107,7 +107,14 @@ class Elastic():
         
         params = [self.KS, self.RLS, self.EI, self.EJ, self.BIJ, self.dim, self.Epow, self.lnorm, fixed]
 #         print('params', params)
-        x0 = np.array(FreeState_node(x00, params, fixedNodes, fixedPos, JErg, JXGrad))
+        computeProblem = True
+        while computeProblem:
+            x0 = np.array(FreeState_node(x00, params, fixedNodes, fixedPos, JErg, JXGrad))
+            if np.isnan(x0).any():
+                # if you get an error, jiggle the nodes a little bit
+                x00 += np.random.normal(0.0, 0.01)
+            else:
+                computeProblem = False
         return x0
             
     def free_state(self, inputpos=None, plot=False):
@@ -170,13 +177,19 @@ class Elastic():
         fixedNodes = np.concatenate(([bn.index for bn in self.boundary], [sn.index for sn in self.sources], [tn.index for tn in self.targets]), axis=0)
         fixedPos = np.concatenate(([bn.position for bn in self.boundary], [sn.position for sn in self.sources], [tn.position for sn in self.targets]), axis=0)
         
-        params = [self.KS, self.RLS, self.EI, self.EJ, self.BIJ, self.dim, self.Epow, self.lnorm, fixed]
-        FS = np.array(FreeState_node(self.x0, params, fixedNodes, fixedPos, JErg, JXGrad))
+        if len(fixedNodes) == self.NN:
+            # if the system is fully constrained, just use constraints as the position (compute won't work)
+            # reorder fixedPos first
+            orderedfixed = np.array([pos for _, pos in sorted(zip(fixedNodes, fixedPos))])
+            CS = orderedfixed.flatten()
+        else:
+            params = [self.KS, self.RLS, self.EI, self.EJ, self.BIJ, self.dim, self.Epow, self.lnorm, fixed]
+            CS = np.array(FreeState_node(self.x0, params, fixedNodes, fixedPos, JErg, JXGrad))
         
         if plot:
-            self.plot_state(FS)
+            self.plot_state(CS)
         
-        return FS
+        return CS
 
 
 if __name__=='__main__':
