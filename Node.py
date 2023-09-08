@@ -13,4 +13,4 @@ class Node():
 
 if __name__=='__main__':
     n = Node()
-    print(n.index, n.position, n.fixed)
+    print(n)

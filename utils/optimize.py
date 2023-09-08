@@ -91,5 +91,22 @@ def FreeState_node(x0, params, SourceNodes, SourcePos, f, df):
 
     return xmin
 
+@numba.jit()
+def FreeState_edge(x0, params, SourceEdges, SourceStrains, f, df):
+    [KS, RLS, EI, EJ, BIJ, dim, Epow, lnorm, fixedNodes] = params
+    KFree = KS.copy()
+    #KFree[SourceEdges] = 20.
+    RLFree = RLS.copy()
+    #RLFree[SourceEdges] = RLS[SourceEdges] * (1 + SourceStrains)
+    params = [KFree, RLFree, EI, EJ, BIJ, dim, Epow, lnorm, fixedNodes]
+    
+    pos0 = x0.copy()
+    for i in range(len(SourceEdges)):
+        pos0[EI[SourceEdges[i]]*dim : (EI[SourceEdges[i]]+1)*dim] -= BIJ[SourceEdges[i]] * SourceStrains[i]*RLS[SourceEdges[i]]/2
+        pos0[EJ[SourceEdges[i]]*dim : (EJ[SourceEdges[i]]+1)*dim] += BIJ[SourceEdges[i]] * SourceStrains[i]*RLS[SourceEdges[i]]/2
+    
+    xmin = CalcState(pos0, params, f, df)
+    return xmin
+
 if __name__ == "__main__":
     pass
