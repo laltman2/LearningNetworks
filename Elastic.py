@@ -1,9 +1,12 @@
 import numpy as np
 import pandas as pd
+import json
 from matplotlib import pyplot as plt
 import numpy.linalg as la
 from Node import Node
-from utils.optimize import FreeState_node, JErg, JXGrad
+# from utils.optimize import Dists, FreeState_node, JErg, JXGrad
+from utils.optimize import *
+
 
 class Elastic():
     
@@ -56,8 +59,8 @@ class Elastic():
         
         # history dataframe
         self.history = pd.DataFrame(columns=['step', 
-                                             'free_in', 'free_out', 'clamp_in', 'clamp_out', 'cost',
-                                              'RLS', 'KS' 'exts_f', 'exts_c'])
+                                             'free_in', 'free_out', 'clamp_in', 'clamp_out', 'cost', 'loss',
+                                              'RLS', 'KS', 'exts_f', 'exts_c'])
         
         # initial equilibrium state
         self.x0 = self.eq_state(nodes)
@@ -69,7 +72,6 @@ class Elastic():
     @KS.setter
     def KS(self, value):
         self._KS = value
-        print('Recalculating eq state')
         self.x0 = self.eq_state(self.x0)
         
     @property
@@ -79,7 +81,6 @@ class Elastic():
     @RLS.setter
     def RLS(self, value):
         self._RLS = value
-        print('Recalculating eq state')
         self.x0 = self.eq_state(self.x0)
     
     def plot_state(self, pos, ax=None, save=None):
@@ -210,7 +211,110 @@ class Elastic():
             self.plot_state(CS)
         
         return CS
+    
+    def get_exts(self, pos):
+        return np.array(Dists(pos, self.EI, self.EJ, self.dim, self.lnorm))
+    
+    def free_output(self, inputpos):
+        #evaluate model (shortcut for trained models)
+        FS = self.free_state(inputpos)
+        FSdim = FS.reshape(self.NN, self.dim)
+        return np.array([FSdim[tn.index] for tn in self.targets])
+    
+    def loss(self, freeout, desiredout):
+        #mean squared error of the outputs
+        #freeout, desiredout: arrays of shape (# targets, dim)
+        isfixed = np.invert(np.array([tn.fixed for tn in self.targets]))
+        diffouts = desiredout - freeout
+        np.place(diffouts, isfixed, 0.)
+        return np.sum(np.square(diffouts))
+    
+    def cost(self, freepos, clamppos):
+        #energy cost between free and clamped network states
+        #freepos, clamppos: 1D arrays of size (NN*dim)
+        EC = Energy(clamppos, self.KS, self.RLS, self.EI, self.EJ, self.dim, self.Epow, self.lnorm)
+        EF = Energy(freepos, self.KS, self.RLS, self.EI, self.EJ, self.dim, self.Epow, self.lnorm)
+        return EC - EF
+    
+    def update(self, exts_f, exts_c, rule = 'RLS', clip = [0.5, 1.]):
+        row = self.history.loc[self.currentstep]
 
+        #update rule
+        if rule == 'RLS':
+            dLs = self.alpha*np.multiply(self.KS, (exts_c - exts_f))
+            self.RLS += dLs
+            #clip rest lengths between max and min values
+            if clip is not None:
+                self.RLS = np.clip(self.RLS, clip[0], clip[1])
+        elif rule == 'KS':
+            if clip is not None:
+                self.KS = np.clip(self.KS, clip[0], clip[1])
+        else:
+            raise Exception('Learning rule not recongized')
+
+        #update equilibrium state
+        self.x0 = self.eq_state(self.x0)
+        
+    def initialize_step(self):
+        self.currentstep += 1
+        #start a new row
+        self.history.loc[self.currentstep] = [self.currentstep] + [None]*(len(self.history.columns)-1)
+     
+    def learning_step(self, iopair):
+        #iopair: tuple of: array of shape(# sources, dim), array of shape(#targets, dim)
+        desiredin, desiredout = iopair
+        print(desiredin)
+        
+        self.initialize_step()
+        eq = self.x0.reshape(self.NN,self.dim)
+        refin = [eq[sn.index] for sn in self.sources]
+        refout = [eq[tn.index] for tn in self.targets]
+        row = self.history.loc[self.currentstep]
+        row.RLS = json.dumps(str(self.RLS))
+        row.KS = json.dumps(str(self.KS))
+        
+        #apply free state
+        FS = self.free_state(desiredin)
+        exts_f = self.get_exts(FS)
+        row.exts_f = json.dumps(str(exts_f.tolist()))
+        FSdim = FS.reshape(self.NN,self.dim)
+        row.free_in = json.dumps(str([FSdim[sn.index].tolist() for sn in self.sources]))
+        freeout = np.array([FSdim[tn.index] for tn in self.targets])
+        row.free_out = json.dumps(str(freeout.tolist()))
+        
+        #apply clamped state
+        clampout = self.eta*desiredout + (1-self.eta)*freeout
+        
+        CS = self.clamped_state(desiredin, clampout)
+        if np.isnan(CS).any():
+            self.plot_state(self.x0)
+            self.stop_train = True
+        exts_c = self.get_exts(CS)
+        row.exts_c = json.dumps(str(exts_c.tolist()))
+        CSdim = CS.reshape(self.NN,self.dim)
+        row.clamp_in = json.dumps(str([CSdim[sn.index].tolist() for sn in self.sources]))
+        row.clamp_out = json.dumps(str([CSdim[tn.index].tolist() for tn in self.targets]))
+        
+        row.loss = self.loss(freeout, desiredout)
+        row.cost = self.cost(FS, CS)
+        self.update(exts_f, exts_c)
+        
+        self.history.loc[self.currentstep] = row #fix this later
+        
+    def train(self, iopairs = [], Nsteps = 100):
+        #iopairs: list of tuples, length (# datapoints)
+        #Nsteps: integer, how many times to cycle through all data points
+        pairindex = 0
+        
+        while (self.currentstep+1 < Nsteps*len(iopairs)) and self.stop_train==False:
+            pairindex = pairindex % len(iopairs)
+            self.learning_step(iopairs[pairindex])
+#             all_outs = []
+#             for inp in np.array(iopairs)[:,0]:
+#                 FS = self.free_state(inp)
+#                 all_outs.append(FS[6])
+#             self.history.at[self.currentstep, 'all_outs'] = json.dumps(all_outs)
+            pairindex += 1
 
 if __name__=='__main__':
     import warnings

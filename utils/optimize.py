@@ -11,12 +11,21 @@ fdec = 0.5
 fa = 0.99
 Nnegmax = 2000
 
-def Energy(pos, KS, RLS, EI, EJ, dim=2, Epow=2, lnorm=2):
-    #NE = len(EI)
+
+def Dists(pos, EI, EJ, dim=2, lnorm=2):
     NN = len(pos) // dim
     Pos = jnp.reshape(pos, [NN, dim])
     PmP = Pos[EJ] - Pos[EI]
     DS = jnp.sum(jnp.abs(PmP)**lnorm, axis=1)**(1./lnorm)
+    return DS
+
+def Energy(pos, KS, RLS, EI, EJ, dim=2, Epow=2, lnorm=2):
+    #NE = len(EI)
+#     NN = len(pos) // dim
+#     Pos = jnp.reshape(pos, [NN, dim])
+#     PmP = Pos[EJ] - Pos[EI]
+#     DS = jnp.sum(jnp.abs(PmP)**lnorm, axis=1)**(1./lnorm)
+    DS = Dists(pos, EI, EJ, dim=dim, lnorm=lnorm)
     ES = 0.5 * KS * (DS - RLS)**Epow
     return jnp.sum(ES)
 
