@@ -266,7 +266,6 @@ class Elastic():
     def learning_step(self, iopair):
         #iopair: tuple of: array of shape(# sources, dim), array of shape(#targets, dim)
         desiredin, desiredout = iopair
-        print(desiredin)
         
         self.initialize_step()
         eq = self.x0.reshape(self.NN,self.dim)
