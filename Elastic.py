@@ -272,17 +272,17 @@ class Elastic():
         refin = [eq[sn.index] for sn in self.sources]
         refout = [eq[tn.index] for tn in self.targets]
         row = self.history.loc[self.currentstep]
-        row.RLS = json.dumps(str(self.RLS))
-        row.KS = json.dumps(str(self.KS))
+        row.RLS = json.dumps(self.RLS.tolist())
+        row.KS = json.dumps(self.KS.tolist())
         
         #apply free state
         FS = self.free_state(desiredin)
         exts_f = self.get_exts(FS)
-        row.exts_f = json.dumps(str(exts_f.tolist()))
+        row.exts_f = json.dumps(exts_f.tolist())
         FSdim = FS.reshape(self.NN,self.dim)
-        row.free_in = json.dumps(str([FSdim[sn.index].tolist() for sn in self.sources]))
+        row.free_in = json.dumps([FSdim[sn.index].tolist() for sn in self.sources])
         freeout = np.array([FSdim[tn.index] for tn in self.targets])
-        row.free_out = json.dumps(str(freeout.tolist()))
+        row.free_out = json.dumps([FSdim[tn.index].tolist() for tn in self.targets])
         
         #apply clamped state
         clampout = self.eta*desiredout + (1-self.eta)*freeout
@@ -292,10 +292,10 @@ class Elastic():
             self.plot_state(self.x0)
             self.stop_train = True
         exts_c = self.get_exts(CS)
-        row.exts_c = json.dumps(str(exts_c.tolist()))
+        row.exts_c = json.dumps(exts_c.tolist())
         CSdim = CS.reshape(self.NN,self.dim)
-        row.clamp_in = json.dumps(str([CSdim[sn.index].tolist() for sn in self.sources]))
-        row.clamp_out = json.dumps(str([CSdim[tn.index].tolist() for tn in self.targets]))
+        row.clamp_in = json.dumps([CSdim[sn.index].tolist() for sn in self.sources])
+        row.clamp_out = json.dumps([CSdim[tn.index].tolist() for tn in self.targets])
         
         row.loss = self.loss(freeout, desiredout)
         row.cost = self.cost(FS, CS)
