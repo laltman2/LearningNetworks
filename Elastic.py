@@ -91,15 +91,18 @@ class Elastic():
         ax.set_aspect('equal')
         ax.axis('off')
         
+        for bn in self.boundary:
+            ax.scatter([pos[bn.index][0]], [pos[bn.index][1]], c='gray', label='source node: {}'.format(bn.index), s = 100, zorder=10)
+        
         for sn in self.sources:
-            ax.scatter([pos[sn.index][0]], [pos[sn.index][1]], c='b', label='source node: {}'.format(sn.index), zorder=10)
+            ax.scatter([pos[sn.index][0]], [pos[sn.index][1]], c='b', label='source node: {}'.format(sn.index), s = 100, zorder=10)
         
         for tn in self.targets:
-            ax.scatter([pos[tn.index][0]], [pos[tn.index][1]], c='r', label='target node: {}'.format(tn.index), zorder=10)
+            ax.scatter([pos[tn.index][0]], [pos[tn.index][1]], c='r', label='target node: {}'.format(tn.index), s=100, zorder=10)
         
         
         for j in range(self.NN):
-            ax.scatter([pos[j][0]], [pos[j][1]], c='k')
+            ax.scatter([pos[j][0]], [pos[j][1]], s=50, c='k')
 
         for i in range(self.NE):
             ei = self.EI[i]
@@ -222,7 +225,7 @@ class Elastic():
         return np.array([FSdim[tn.index] for tn in self.targets])
     
     def loss(self, freeout, desiredout):
-        #mean squared error of the outputs
+        #squared error of the outputs
         #freeout, desiredout: arrays of shape (# targets, dim)
         isfixed = np.invert(np.array([tn.fixed for tn in self.targets]))
         diffouts = desiredout - freeout
