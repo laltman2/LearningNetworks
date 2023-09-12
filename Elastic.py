@@ -8,7 +8,7 @@ from Node import Node
 from utils.optimize import *
 
 
-class Elastic():
+class Elastic(object):
     
     def __init__(self, nodes = np.array([[0.,0.], [0.,1.]]), 
                  edges = np.array([[0,1]]),
@@ -22,8 +22,7 @@ class Elastic():
         # targets: list of Nodes which are restricted only in the clamped state
                  
         # setup network architecture
-        self.dim = nodes.shape[1]
-        self.NN = len(nodes)
+        self.NN, self.dim = nodes.shape
         self.NE = len(edges)
         self.EI, self.EJ = np.transpose(edges)
         
@@ -87,7 +86,11 @@ class Elastic():
         if ax == None:
             fig, ax = plt.subplots()
 
-        pos = pos.reshape(self.NN,2)
+        if pos.size == self.NN*self.dim:
+            pos = pos.reshape(self.NN,self.dim)
+        else:
+            raise Exception("Invalid position size. Expecting size {}, got size {}".format(self.NN*self.dim, pos.size))
+            
         ax.set_aspect('equal')
         ax.axis('off')
         
@@ -117,8 +120,11 @@ class Elastic():
                      
     def eq_state(self, pos):
         # initial node positions (before equilibration)
-        x00 = pos.flatten()
-        
+        if pos.size == self.NN*self.dim:
+            x00 = pos.flatten()
+        else:
+            raise Exception("Invalid position size. Expecting size {}, got size {}".format(self.NN*self.dim, pos.size))
+            
         fixed = []
         for bn in self.boundary:
             for d in range(self.dim):
@@ -130,7 +136,6 @@ class Elastic():
         fixedPos = np.array([bn.position for bn in self.boundary])
         
         params = [self._KS, self._RLS, self.EI, self.EJ, self.BIJ, self.dim, self.Epow, self.lnorm, fixed]
-#         print('params', params)
         computeProblem = True
         while computeProblem:
             x0 = np.array(FreeState_node(x00, params, fixedNodes, fixedPos, JErg, JXGrad))
@@ -145,8 +150,11 @@ class Elastic():
         # inputpos: array of shape (# sources, dim)
         # if None, keep the position(s) already in the source node object(s)
         if inputpos is not None:
-            for ix in range(len(self.sources)):
-                self.sources[ix].position = inputpos[ix]
+            if inputpos.shape == (len(self.sources), self.dim):
+                for ix in range(len(self.sources)):
+                    self.sources[ix].position = inputpos[ix]
+            else:
+                raise Exception("Invalid inputpos shape. Expecting array of shape {}, got shape {}".format((len(self.sources), self.dim), inputpos.shape))
         
         fixed = []
         for bn in self.boundary:
@@ -175,12 +183,18 @@ class Elastic():
         # inputpos/outputpos: arrays of shape (# sources/targets, dim)
         # if None, keep the position(s) already in the source/target node object(s)
         if inputpos is not None:
-            for ix in range(len(self.sources)):
-                self.sources[ix].position = inputpos[ix]
+            if inputpos.shape == (len(self.sources), self.dim):
+                for ix in range(len(self.sources)):
+                    self.sources[ix].position = inputpos[ix]
+            else:
+                raise Exception("Invalid inputpos shape. Expecting array of shape {}, got shape {}".format((len(self.sources), self.dim), inputpos.shape))
                 
         if outputpos is not None:
-            for ix in range(len(self.targets)):
-                self.targets[ix].position = outputpos[ix]
+            if outputpos.shape == (len(self.targets), self.dim):
+                for ix in range(len(self.targets)):
+                    self.targets[ix].position = outputpos[ix]
+            else:
+                raise Exception("Invalid outputpos shape. Expecting array of shape {}, got shape {}".format((len(self.targets), self.dim), outputpos.shape))
         
         fixed = []
         for bn in self.boundary:
@@ -216,7 +230,10 @@ class Elastic():
         return CS
     
     def get_exts(self, pos):
-        return np.array(Dists(pos, self.EI, self.EJ, self.dim, self.lnorm))
+        if pos.size == self.NN*self.dim:
+            return np.array(Dists(pos, self.EI, self.EJ, self.dim, self.lnorm))
+        else:
+            raise Exception("Invalid position size. Expecting size {}, got size {}".format(self.NN*self.dim, pos.size))
     
     def free_output(self, inputpos):
         #evaluate model (shortcut for trained models)
@@ -239,7 +256,7 @@ class Elastic():
         EF = Energy(freepos, self.KS, self.RLS, self.EI, self.EJ, self.dim, self.Epow, self.lnorm)
         return EC - EF
     
-    def update(self, exts_f, exts_c, rule = 'RLS', clip = [0.5, 1.]):
+    def update(self, exts_f, exts_c, rule = 'RLS', clip = [0.5, 1.5]):
         row = self.history.loc[self.currentstep]
 
         #update rule
