@@ -51,8 +51,8 @@ class Elastic(object):
         self.lnorm = 2.
         
         # training hyperparameters
-        self.eta = 1.
-        self.alpha = 1.
+        self._eta = 1.
+        self._alpha = 1.
         self.currentstep = -1
         self.stop_train = False
         
@@ -81,6 +81,22 @@ class Elastic(object):
     def RLS(self, value):
         self._RLS = value
         self.x0 = self.eq_state(self.x0)
+        
+    @property
+    def eta(self):
+        return self._eta
+    
+    @eta.setter
+    def eta(self, value):
+        self._eta = value
+        
+    @property
+    def alpha(self):
+        return self._alpha
+    
+    @alpha.setter
+    def alpha(self, value):
+        self._alpha = value
     
     def plot_state(self, pos, ax=None, save=None):
         if ax == None:
@@ -244,6 +260,10 @@ class Elastic(object):
     def loss(self, freeout, desiredout):
         #squared error of the outputs
         #freeout, desiredout: arrays of shape (# targets, dim)
+        if freeout.shape != len(self.targets), self.dim:
+            raise Exception("Invalid freeout shape. Expecting shape {}, got shape {}".format((len(self.targets), self.dim), freeout.shape)
+        if desiredout.shape != len(self.targets), self.dim:
+            raise Exception("Invalid desiredout shape. Expecting shape {}, got shape {}".format((len(self.targets), self.dim), desiredout.shape)
         isfixed = np.invert(np.array([tn.fixed for tn in self.targets]))
         diffouts = desiredout - freeout
         np.place(diffouts, isfixed, 0.)
@@ -261,7 +281,7 @@ class Elastic(object):
 
         #update rule
         if rule == 'RLS':
-            dLs = self.alpha*np.multiply(self.KS, (exts_c - exts_f))
+            dLs = self._alpha*np.multiply(self.KS, (exts_c - exts_f))
             self.RLS += dLs
             #clip rest lengths between max and min values
             if clip is not None:
@@ -283,6 +303,10 @@ class Elastic(object):
     def learning_step(self, iopair):
         #iopair: tuple of: array of shape(# sources, dim), array of shape(#targets, dim)
         desiredin, desiredout = iopair
+        if desiredin.shape != (len(self.sources), self.dim):
+            raise Exception("Invalid input shape. Expecting shape {}, got shape {}".format((len(self.sources), self.dim), desiredin.shape)
+        if desiredout.shape != (len(self.targets), self.dim):
+            raise Exception("Invalid output shape. Expecting shape {}, got shape {}".format((len(self.targets), self.dim), desiredout.shape)
         
         self.initialize_step()
         eq = self.x0.reshape(self.NN,self.dim)
@@ -302,7 +326,7 @@ class Elastic(object):
         row.free_out = json.dumps([FSdim[tn.index].tolist() for tn in self.targets])
         
         #apply clamped state
-        clampout = self.eta*desiredout + (1-self.eta)*freeout
+        clampout = self._eta*desiredout + (1-self._eta)*freeout
         
         CS = self.clamped_state(desiredin, clampout)
         if np.isnan(CS).any():
