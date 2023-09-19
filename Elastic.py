@@ -227,14 +227,17 @@ class Elastic(object):
             for d in range(self.dim):
                 if tn.fixed[d]:
                     fixed.append(tn.index*self.dim + d)
-
+    
         fixedNodes = np.concatenate(([bn.index for bn in self.boundary], [sn.index for sn in self.sources], [tn.index for tn in self.targets]), axis=0)
-        fixedPos = np.concatenate(([bn.position for bn in self.boundary], [sn.position for sn in self.sources], [tn.position for sn in self.targets]), axis=0)
+        fixedPos = np.concatenate(([bn.position for bn in self.boundary], [sn.position for sn in self.sources], [tn.position for tn in self.targets]), axis=0)
         
-        if len(fixedNodes) == self.NN:
-            # if the system is fully constrained, just use constraints as the position (compute won't work)
-            # reorder fixedPos first
-            orderedfixed = np.array([pos for _, pos in sorted(zip(fixedNodes, fixedPos))])
+        if len(fixed) > (self.NN-1)*self.dim:
+            # if the system is (almost?) fully constrained, just use constraints as the position (compute won't work)
+            print('Too many constraints, falling back to default positions')
+            # remove duplicates and reorder
+            _, ix = np.unique(fixedNodes, return_index=True)
+            orderedfixed = fixedPos[ix]
+#             orderedfixed = np.array([pos for _, pos in sorted(zip(fixedNodes, fixedPos))])
             CS = orderedfixed.flatten()
         else:
             params = [self._KS, self._RLS, self.EI, self.EJ, self.BIJ, self.dim, self.Epow, self.lnorm, fixed]
@@ -260,10 +263,12 @@ class Elastic(object):
     def loss(self, freeout, desiredout):
         #squared error of the outputs
         #freeout, desiredout: arrays of shape (# targets, dim)
-        if freeout.shape != len(self.targets), self.dim:
-            raise Exception("Invalid freeout shape. Expecting shape {}, got shape {}".format((len(self.targets), self.dim), freeout.shape)
-        if desiredout.shape != len(self.targets), self.dim:
-            raise Exception("Invalid desiredout shape. Expecting shape {}, got shape {}".format((len(self.targets), self.dim), desiredout.shape)
+        if freeout.shape != (len(self.targets), self.dim):
+            raise Exception("Invalid freeout shape. Expecting shape {}, got shape {}".format((len(self.targets), self.dim), freeout.shape))
+#             print('free bad')
+        elif desiredout.shape != (len(self.targets), self.dim):
+            raise Exception("Invalid desiredout shape. Expecting shape {}, got shape {}".format((len(self.targets), self.dim), desiredout.shape))
+#             print('desired bad')
         isfixed = np.invert(np.array([tn.fixed for tn in self.targets]))
         diffouts = desiredout - freeout
         np.place(diffouts, isfixed, 0.)
@@ -300,13 +305,16 @@ class Elastic(object):
         #start a new row
         self.history.loc[self.currentstep] = [self.currentstep] + [None]*(len(self.history.columns)-1)
      
-    def learning_step(self, iopair):
+    def learning_step(self, iopair, **kwargs):
         #iopair: tuple of: array of shape(# sources, dim), array of shape(#targets, dim)
         desiredin, desiredout = iopair
         if desiredin.shape != (len(self.sources), self.dim):
-            raise Exception("Invalid input shape. Expecting shape {}, got shape {}".format((len(self.sources), self.dim), desiredin.shape)
+            raise Exception("Invalid input shape. Expecting shape {}, got shape {}".format((len(self.sources), self.dim), desiredin.shape))
+#             print('in bad')
         if desiredout.shape != (len(self.targets), self.dim):
-            raise Exception("Invalid output shape. Expecting shape {}, got shape {}".format((len(self.targets), self.dim), desiredout.shape)
+            raise Exception("Invalid output shape. Expecting shape {}, got shape {}".format((len(self.targets), self.dim), desiredout.shape))
+#             print('out bad')
+             
         
         self.initialize_step()
         eq = self.x0.reshape(self.NN,self.dim)
@@ -340,18 +348,18 @@ class Elastic(object):
         
         row.loss = self.loss(freeout, desiredout)
         row.cost = self.cost(FS, CS)
-        self.update(exts_f, exts_c)
+        self.update(exts_f, exts_c, **kwargs)
         
         self.history.loc[self.currentstep] = row #fix this later
         
-    def train(self, iopairs = [], Nsteps = 100):
+    def train(self, iopairs = [], Nsteps = 100, **kwargs):
         #iopairs: list of tuples, length (# datapoints)
         #Nsteps: integer, how many times to cycle through all data points
         pairindex = 0
         
         while (self.currentstep+1 < Nsteps*len(iopairs)) and self.stop_train==False:
             pairindex = pairindex % len(iopairs)
-            self.learning_step(iopairs[pairindex])
+            self.learning_step(iopairs[pairindex], **kwargs)
 #             all_outs = []
 #             for inp in np.array(iopairs)[:,0]:
 #                 FS = self.free_state(inp)
