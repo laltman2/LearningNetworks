@@ -233,7 +233,7 @@ class Elastic(object):
         
         if len(fixed) > (self.NN-1)*self.dim:
             # if the system is (almost?) fully constrained, just use constraints as the position (compute won't work)
-            print('Too many constraints, falling back to default positions')
+#             print('Too many constraints, falling back to default positions')
             # remove duplicates and reorder
             _, ix = np.unique(fixedNodes, return_index=True)
             orderedfixed = fixedPos[ix]
@@ -292,6 +292,8 @@ class Elastic(object):
             if clip is not None:
                 self.RLS = np.clip(self.RLS, clip[0], clip[1])
         elif rule == 'KS':
+            dks = self._alpha*[np.subtract(exts_c, self.RLS)**2 - np.subtract(exts_f, self.RLS)**2]
+            self.KS += dks
             if clip is not None:
                 self.KS = np.clip(self.KS, clip[0], clip[1])
         else:
