@@ -292,7 +292,7 @@ class Elastic(object):
             if clip is not None:
                 self.RLS = np.clip(self.RLS, clip[0], clip[1])
         elif rule == 'KS':
-            dks = self._alpha*[np.subtract(exts_c, self.RLS)**2 - np.subtract(exts_f, self.RLS)**2]
+            dks = self._alpha*(np.subtract(exts_c, self.RLS)**2 - np.subtract(exts_f, self.RLS)**2)
             self.KS += dks
             if clip is not None:
                 self.KS = np.clip(self.KS, clip[0], clip[1])
