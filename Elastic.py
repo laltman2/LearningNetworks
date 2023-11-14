@@ -46,6 +46,8 @@ class Elastic(object):
         self.sources = sources
         self.targets = targets
         
+        self.fixededges = []
+        
         # energy scaling and loss normalization
         self.Epow = 2.
         self.lnorm = 2.
@@ -127,6 +129,42 @@ class Elastic(object):
             ei = self.EI[i]
             ej = self.EJ[i]
             ax.plot([pos[ei][0], pos[ej][0]], [pos[ei][1], pos[ej][1]], 'k')
+        
+        if save:
+            fig.tight_layout()
+            fig.savefig(save)
+        if ax==None:
+            plt.show()
+            
+    def plot_state2(self, pos, ax=None, save=None):
+        if ax == None:
+            fig, ax = plt.subplots()
+
+        if pos.size == self.NN*self.dim:
+            pos = pos.reshape(self.NN,self.dim)
+        else:
+            raise Exception("Invalid position size. Expecting size {}, got size {}".format(self.NN*self.dim, pos.size))
+            
+        ax.set_aspect('equal')
+        ax.axis('off')
+        
+        for bn in self.boundary:
+            ax.scatter([pos[bn.index][0]], [pos[bn.index][1]], c='dimgrey', label='source node: {}'.format(bn.index), s = 100, zorder=10)
+        
+        for sn in self.sources:
+            ax.scatter([pos[sn.index][0]], [pos[sn.index][1]], c='turquoise', label='source node: {}'.format(sn.index), s = 100, zorder=10)
+        
+        for tn in self.targets:
+            ax.scatter([pos[tn.index][0]], [pos[tn.index][1]], c='pink', label='target node: {}'.format(tn.index), s=100, zorder=10)
+        
+        
+        for j in range(self.NN):
+            ax.scatter([pos[j][0]], [pos[j][1]], s=50, c='k')
+
+        for i in range(self.NE):
+            ei = self.EI[i]
+            ej = self.EJ[i]
+            ax.plot([pos[ei][0], pos[ej][0]], [pos[ei][1], pos[ej][1]], 'k', c='g')
         
         if save:
             fig.tight_layout()
@@ -281,7 +319,7 @@ class Elastic(object):
         EF = Energy(freepos, self.KS, self.RLS, self.EI, self.EJ, self.dim, self.Epow, self.lnorm)
         return EC - EF
     
-    def update(self, exts_f, exts_c, rule = 'RLS', clip = [0.5, 1.5]):
+    def update(self, exts_f, exts_c, rule = 'RLS', clip = [0.5, 1.5], **kwargs):
         row = self.history.loc[self.currentstep]
 
         #update rule
@@ -291,25 +329,34 @@ class Elastic(object):
             #clip rest lengths between max and min values
             if clip is not None:
                 self.RLS = np.clip(self.RLS, clip[0], clip[1])
+            else:
+                self.RLS[self.RLS < 0] = 0
         elif rule == 'KS':
             dks = (-1)*self._alpha*(np.subtract(exts_c, self.RLS)**2 - np.subtract(exts_f, self.RLS)**2)
+            dks[self.fixededges] = 0
             self.KS += dks
             if clip is not None:
                 self.KS = np.clip(self.KS, clip[0], clip[1])
+            else:
+                self.KS[self.KS < 0] = 0
         else:
             raise Exception('Learning rule not recongized')
 
         #update equilibrium state
         self.x0 = self.eq_state(self.x0)
         
-    def initialize_step(self):
+    def initialize_step(self, verbose=False, **kwargs):
         self.currentstep += 1
         #start a new row
         self.history.loc[self.currentstep] = [self.currentstep] + [None]*(len(self.history.columns)-1)
+        if verbose:
+            print('Step {} initialized'.format(self.currentstep))
      
     def learning_step(self, iopair, **kwargs):
         #iopair: tuple of: array of shape(# sources, dim), array of shape(#targets, dim)
         desiredin, desiredout = iopair
+        desiredin = np.array(desiredin)
+        desiredout = np.array(desiredout)
         if desiredin.shape != (len(self.sources), self.dim):
             raise Exception("Invalid input shape. Expecting shape {}, got shape {}".format((len(self.sources), self.dim), desiredin.shape))
 #             print('in bad')
@@ -318,7 +365,7 @@ class Elastic(object):
 #             print('out bad')
              
         
-        self.initialize_step()
+        self.initialize_step(**kwargs)
         eq = self.x0.reshape(self.NN,self.dim)
         refin = [eq[sn.index] for sn in self.sources]
         refout = [eq[tn.index] for tn in self.targets]
@@ -362,11 +409,10 @@ class Elastic(object):
         while (self.currentstep+1 < Nsteps*len(iopairs)) and self.stop_train==False:
             pairindex = pairindex % len(iopairs)
             self.learning_step(iopairs[pairindex], **kwargs)
-#             all_outs = []
-#             for inp in np.array(iopairs)[:,0]:
-#                 FS = self.free_state(inp)
-#                 all_outs.append(FS[6])
-#             self.history.at[self.currentstep, 'all_outs'] = json.dumps(all_outs)
+            all_outs = []
+            for inp in np.array(iopairs)[:,0]:
+                all_outs.append(self.free_output(inp).tolist())
+            self.history.at[self.currentstep, 'all_outs'] = json.dumps(all_outs)
             pairindex += 1
 
 if __name__=='__main__':
