@@ -42,7 +42,7 @@ class Elastic(object):
         self._KS = np.ones(self.NE, dtype=np.float32)
         
         # set boundary, sources, and targets
-        self.boundary = boundary
+        self._boundary = boundary
         self.sources = sources
         self.targets = targets
         
@@ -85,6 +85,15 @@ class Elastic(object):
         self.x0 = self.eq_state(self.x0)
         
     @property
+    def boundary(self):
+        return self._boundary
+        
+    @RLS.setter
+    def boundary(self, value):
+        self._boundary = value
+        self.x0 = self.eq_state(self.x0)
+        
+    @property
     def eta(self):
         return self._eta
     
@@ -112,7 +121,7 @@ class Elastic(object):
         ax.set_aspect('equal')
         ax.axis('off')
         
-        for bn in self.boundary:
+        for bn in self._boundary:
             ax.scatter([pos[bn.index][0]], [pos[bn.index][1]], c='gray', label='source node: {}'.format(bn.index), s = 100, zorder=10)
         
         for sn in self.sources:
@@ -148,7 +157,7 @@ class Elastic(object):
         ax.set_aspect('equal')
         ax.axis('off')
         
-        for bn in self.boundary:
+        for bn in self._boundary:
             ax.scatter([pos[bn.index][0]], [pos[bn.index][1]], c='dimgrey', label='source node: {}'.format(bn.index), s = 100, zorder=10)
         
         for sn in self.sources:
@@ -180,14 +189,14 @@ class Elastic(object):
             raise Exception("Invalid position size. Expecting size {}, got size {}".format(self.NN*self.dim, pos.size))
             
         fixed = []
-        for bn in self.boundary:
+        for bn in self._boundary:
             for d in range(self.dim):
                 if bn.fixed[d]:
                     fixed.append(bn.index*self.dim + d)
                 
         
-        fixedNodes = np.array([bn.index for bn in self.boundary])
-        fixedPos = np.array([bn.position for bn in self.boundary])
+        fixedNodes = np.array([bn.index for bn in self._boundary])
+        fixedPos = np.array([bn.position for bn in self._boundary])
         
         params = [self._KS, self._RLS, self.EI, self.EJ, self.BIJ, self.dim, self.Epow, self.lnorm, fixed]
         computeProblem = True
@@ -211,7 +220,7 @@ class Elastic(object):
                 raise Exception("Invalid inputpos shape. Expecting array of shape {}, got shape {}".format((len(self.sources), self.dim), inputpos.shape))
         
         fixed = []
-        for bn in self.boundary:
+        for bn in self._boundary:
             for d in range(self.dim):
                 if bn.fixed[d]:
                     fixed.append(bn.index*self.dim + d)
@@ -222,8 +231,8 @@ class Elastic(object):
                     fixed.append(sn.index*self.dim + d)
 
         
-        fixedNodes = np.concatenate(([bn.index for bn in self.boundary], [sn.index for sn in self.sources]), axis=0)
-        fixedPos = np.concatenate(([bn.position for bn in self.boundary], [sn.position for sn in self.sources]), axis=0)
+        fixedNodes = np.concatenate(([bn.index for bn in self._boundary], [sn.index for sn in self.sources]), axis=0)
+        fixedPos = np.concatenate(([bn.position for bn in self._boundary], [sn.position for sn in self.sources]), axis=0)
         
         params = [self._KS, self._RLS, self.EI, self.EJ, self.BIJ, self.dim, self.Epow, self.lnorm, fixed]
         FS = np.array(FreeState_node(self.x0, params, fixedNodes, fixedPos, JErg, JXGrad))
@@ -251,7 +260,7 @@ class Elastic(object):
                 raise Exception("Invalid outputpos shape. Expecting array of shape {}, got shape {}".format((len(self.targets), self.dim), outputpos.shape))
         
         fixed = []
-        for bn in self.boundary:
+        for bn in self._boundary:
             for d in range(self.dim):
                 if bn.fixed[d]:
                     fixed.append(bn.index*self.dim + d)
@@ -266,8 +275,8 @@ class Elastic(object):
                 if tn.fixed[d]:
                     fixed.append(tn.index*self.dim + d)
     
-        fixedNodes = np.concatenate(([bn.index for bn in self.boundary], [sn.index for sn in self.sources], [tn.index for tn in self.targets]), axis=0)
-        fixedPos = np.concatenate(([bn.position for bn in self.boundary], [sn.position for sn in self.sources], [tn.position for tn in self.targets]), axis=0)
+        fixedNodes = np.concatenate(([bn.index for bn in self._boundary], [sn.index for sn in self.sources], [tn.index for tn in self.targets]), axis=0)
+        fixedPos = np.concatenate(([bn.position for bn in self._boundary], [sn.position for sn in self.sources], [tn.position for tn in self.targets]), axis=0)
         
         if len(fixed) > (self.NN-1)*self.dim:
             # if the system is (almost?) fully constrained, just use constraints as the position (compute won't work)
