@@ -352,11 +352,13 @@ class Elastic(object):
         return EC - EF
     
     def update(self, exts_f, exts_c, rule = 'RLS', clip = [0.5, 1.5], **kwargs):
+        
         row = self.history.loc[self.currentstep]
-
+        
         #update rule
         if rule == 'RLS':
             dLs = self._alpha*np.multiply(self.KS, (exts_c - exts_f))
+            dLs[self.fixededges] = 0
             self.RLS += dLs
             #clip rest lengths between max and min values
             if clip is not None:
@@ -384,7 +386,7 @@ class Elastic(object):
         if verbose:
             print('Step {} initialized'.format(self.currentstep))
      
-    def learning_step(self, taskIndex=0, pairIndex=0, **kwargs):
+    def learning_step(self, taskIndex=0, pairIndex=0, plot=False, **kwargs):
         #iopair: tuple of: array of shape(# sources, dim), array of shape(#targets, dim)
         
         task = self.tasks[taskIndex]
@@ -404,7 +406,7 @@ class Elastic(object):
         row.task = taskIndex
         
         #apply free state
-        FS = self.free_state(taskIndex,inputs)
+        FS = self.free_state(taskIndex,inputs,plot=plot)
         exts_f = self.get_exts(FS)
         row.exts_f = json.dumps(exts_f.tolist())
         
@@ -424,7 +426,7 @@ class Elastic(object):
         clampout = self._eta*outputs + (1-self._eta)*freeout
         newIOpair = (inputs, clampout)
         
-        CS = self.clamped_state(taskIndex,newIOpair)
+        CS = self.clamped_state(taskIndex,newIOpair,plot=plot)
         if np.isnan(CS).any():
             self.plot_state(self.x0)
             self.stop_train = True
@@ -448,7 +450,7 @@ class Elastic(object):
         self.history.loc[self.currentstep] = row #fix this later
         
         
-    def train(self, Nsteps = 100, tasks = None, **kwargs):
+    def train(self, Nsteps = 100, tasks = None, plot=False, **kwargs):
         # tasks: which task indices to train for (if none, does all)
         # Nsteps: how many times to cycle through all data points in all trainable tasks
         
@@ -460,7 +462,7 @@ class Elastic(object):
         while (totalTrainStep < Nsteps) and self.stop_train==False:
             for taskIndex in tasks:
                 for pairIndex in range(len(self.tasks[taskIndex].IOpairs)):
-                    self.learning_step(taskIndex, pairIndex, **kwargs)
+                    self.learning_step(taskIndex, pairIndex, plot=plot, **kwargs)
             totalTrainStep += 1
                     
 
