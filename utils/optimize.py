@@ -102,6 +102,7 @@ def FreeState_node(x0, params, SourceNodes, SourcePos, f, df):
 
 @numba.jit()
 def FreeState_edge(x0, params, SourceEdges, SourceStrains, f, df):
+    
     [KS, RLS, EI, EJ, BIJ, dim, Epow, lnorm, fixedNodes] = params
     KFree = KS.copy()
     #KFree[SourceEdges] = 20.

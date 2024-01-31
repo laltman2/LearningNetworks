@@ -4,7 +4,8 @@ import json
 from matplotlib import pyplot as plt
 import numpy.linalg as la
 from LearningNetworks.Node import Node
-from LearningNetworks.Task import Task
+from LearningNetworks.EdgeTask import EdgeTask
+from LearningNetworks.NodeTask import NodeTask
 # from utils.optimize import Dists, FreeState_node, JErg, JXGrad
 from LearningNetworks.utils.optimize import *
 
@@ -124,12 +125,27 @@ class Elastic(object):
             ax.scatter([pos[bn.index][0]], [pos[bn.index][1]], c='gray', label='boundary node: {}'.format(bn.index), s = 100, zorder=10, **kwargs)
         
         for task in self.tasks:
-            for sn in task.sourcenodes:
-                ax.scatter([pos[sn][0]], [pos[sn][1]], c='b', label='source node: {}'.format(sn), s = 100, zorder=10, **kwargs)
+            if isinstance(task, NodeTask):
+                for sn in task.sourcenodes:
+                    ax.scatter([pos[sn][0]], [pos[sn][1]], c='b', label='source node: {}'.format(sn), s = 100, zorder=10, **kwargs)
 
-            for tn in task.targetnodes:
-                ax.scatter([pos[tn][0]], [pos[tn][1]], c='r', label='target node: {}'.format(tn), s=100, zorder=10, **kwargs)
+                for tn in task.targetnodes:
+                    ax.scatter([pos[tn][0]], [pos[tn][1]], c='r', label='target node: {}'.format(tn), s=100, zorder=10, **kwargs)
 
+            if isinstance(task, EdgeTask):
+                for se in task.sourceedges:
+                    ei = self.EI[se]
+                    ej = self.EJ[se]
+                    ax.plot([pos[ei][0], pos[ej][0]], [pos[ei][1], pos[ej][1]], color='lightblue', linewidth=3, zorder=10, **kwargs)
+#                     ax.scatter([pos[self.EI[se]][0]], [pos[self.EI[se]][1]], c='lightblue', label='source edge: {}, side 1'.format(se), s = 100, zorder=10, **kwargs)
+#                     ax.scatter([pos[self.EJ[se]][0]], [pos[self.EJ[se]][1]], c='lightblue', label='source edge: {}, side 2'.format(se), s = 100, zorder=10, **kwargs)
+
+                for te in task.targetedges:
+                    ei = self.EI[te]
+                    ej = self.EJ[te]
+                    ax.plot([pos[ei][0], pos[ej][0]], [pos[ei][1], pos[ej][1]], color='pink', linewidth=3, zorder=10, **kwargs)
+#                     ax.scatter([pos[self.EI[te]][0]], [pos[self.EI[te]][1]], c='pink', label='target edge: {}, side 1'.format(te), s=100, zorder=10, **kwargs)
+#                     ax.scatter([pos[self.EJ[te]][0]], [pos[self.EJ[te]][1]], c='pink', label='target node: {}, side 2'.format(te), s=100, zorder=10, **kwargs)
         
         for j in range(self.NN):
             ax.scatter([pos[j][0]], [pos[j][1]], s=50, c='k', **kwargs)
@@ -191,18 +207,31 @@ class Elastic(object):
             for d in range(self.dim):
                 if bn.fixed[d]:
                     fixed.append(bn.index*self.dim + d)
-                    
-        for sn in sources:
-            for d in range(self.dim):
-                if sn.fixed[d]:
-                    fixed.append(sn.index*self.dim + d)
+             
+        if isinstance(task, NodeTask):
+            for sn in sources:
+                for d in range(self.dim):
+                    if sn.fixed[d]:
+                        fixed.append(sn.index*self.dim + d)
 
+            fixedNodes = np.concatenate(([bn.index for bn in self._boundary], [sn.index for sn in sources]), axis=0)
+            fixedPos = np.concatenate(([bn.position for bn in self._boundary], [sn.position for sn in sources]), axis=0)
+
+            params = [self._KS, self._RLS, self.EI, self.EJ, self.BIJ, self.dim, self.Epow, self.lnorm, fixed]
+            FS = np.array(FreeState_node(self.x0, params, fixedNodes, fixedPos, JErg, JXGrad))
         
-        fixedNodes = np.concatenate(([bn.index for bn in self._boundary], [sn.index for sn in sources]), axis=0)
-        fixedPos = np.concatenate(([bn.position for bn in self._boundary], [sn.position for sn in sources]), axis=0)
         
-        params = [self._KS, self._RLS, self.EI, self.EJ, self.BIJ, self.dim, self.Epow, self.lnorm, fixed]
-        FS = np.array(FreeState_node(self.x0, params, fixedNodes, fixedPos, JErg, JXGrad))
+        if isinstance(task, EdgeTask):
+            for se in sources:
+                for d in range(self.dim):
+                    fixed.append(self.EI[se.index]*self.dim + d)
+                    fixed.append(self.EJ[se.index]*self.dim + d)
+
+            fixedEdges = [se.index for se in sources]
+            fixedStrains = [se.strain for se in sources]
+
+            params = [self._KS, self._RLS, self.EI, self.EJ, self.BIJ, self.dim, self.Epow, self.lnorm, fixed]
+            FS = np.array(FreeState_edge(self.x0, params, fixedEdges, fixedStrains, JErg, JXGrad))
         
         if plot:
             self.plot_state(FS, **kwargs)
@@ -232,32 +261,50 @@ class Elastic(object):
             for d in range(self.dim):
                 if bn.fixed[d]:
                     fixed.append(bn.index*self.dim + d)
-                    
-        for sn in sources:
-            for d in range(self.dim):
-                if sn.fixed[d]:
-                    fixed.append(sn.index*self.dim + d)
-                    
-        for tn in targets:
-            for d in range(self.dim):
-                if tn.fixed[d]:
-                    fixed.append(tn.index*self.dim + d)
-    
-        fixedNodes = np.concatenate(([bn.index for bn in self._boundary], [sn.index for sn in sources], [tn.index for tn in targets]), axis=0)
-        fixedPos = np.concatenate(([bn.position for bn in self._boundary], [sn.position for sn in sources], [tn.position for tn in targets]), axis=0)
+              
+        if isinstance(task, NodeTask):
+            for sn in sources:
+                for d in range(self.dim):
+                    if sn.fixed[d]:
+                        fixed.append(sn.index*self.dim + d)
+
+            for tn in targets:
+                for d in range(self.dim):
+                    if tn.fixed[d]:
+                        fixed.append(tn.index*self.dim + d)
+
+            fixedNodes = np.concatenate(([bn.index for bn in self._boundary], [sn.index for sn in sources], [tn.index for tn in targets]), axis=0)
+            fixedPos = np.concatenate(([bn.position for bn in self._boundary], [sn.position for sn in sources], [tn.position for tn in targets]), axis=0)
+
+            if len(fixed) > (self.NN-1)*self.dim:
+                # if the system is (almost?) fully constrained, just use constraints as the position (compute won't work)
+    #             print('Too many constraints, falling back to default positions')
+                # remove duplicates and reorder
+                _, ix = np.unique(fixedNodes, return_index=True)
+                orderedfixed = fixedPos[ix]
+    #             orderedfixed = np.array([pos for _, pos in sorted(zip(fixedNodes, fixedPos))])
+                CS = orderedfixed.flatten()
+            else:
+                params = [self._KS, self._RLS, self.EI, self.EJ, self.BIJ, self.dim, self.Epow, self.lnorm, fixed]
+                CS = np.array(FreeState_node(self.x0, params, fixedNodes, fixedPos, JErg, JXGrad))
         
-        if len(fixed) > (self.NN-1)*self.dim:
-            # if the system is (almost?) fully constrained, just use constraints as the position (compute won't work)
-#             print('Too many constraints, falling back to default positions')
-            # remove duplicates and reorder
-            _, ix = np.unique(fixedNodes, return_index=True)
-            orderedfixed = fixedPos[ix]
-#             orderedfixed = np.array([pos for _, pos in sorted(zip(fixedNodes, fixedPos))])
-            CS = orderedfixed.flatten()
-        else:
+        if isinstance(task, EdgeTask):
+            for se in sources:
+                for d in range(self.dim):
+                    fixed.append(self.EI[se.index]*self.dim + d)
+                    fixed.append(self.EJ[se.index]*self.dim + d)
+            
+            for te in targets:
+                for d in range(self.dim):
+                    fixed.append(self.EI[te.index]*self.dim + d)
+                    fixed.append(self.EJ[te.index]*self.dim + d)
+        
+            fixedEdges = np.concatenate(([se.index for se in sources], [te.index for te in targets]), axis=0)
+            fixedStrains = np.concatenate(([se.strain for se in sources], [te.strain for te in targets]), axis=0)
+            
             params = [self._KS, self._RLS, self.EI, self.EJ, self.BIJ, self.dim, self.Epow, self.lnorm, fixed]
-            CS = np.array(FreeState_node(self.x0, params, fixedNodes, fixedPos, JErg, JXGrad))
-        
+            CS = np.array(FreeState_edge(self.x0, params, fixedEdges, fixedStrains, JErg, JXGrad))
+            
         if plot:
             self.plot_state(CS, **kwargs)
         
@@ -272,8 +319,13 @@ class Elastic(object):
     def free_output(self, taskIndex=0, inputs=None, pairIndex=0):
         #evaluate model (shortcut for trained models)
         FS = self.free_state(taskIndex, inputs, pairIndex)
-        FSdim = FS.reshape(self.NN, self.dim)
-        return np.array([FSdim[tn] for tn in self.tasks[taskIndex].targetnodes])
+        if isinstance(self.tasks[taskIndex], NodeTask):
+            FSdim = FS.reshape(self.NN, self.dim)
+            freeout = np.array([FSdim[tn] for tn in self.tasks[taskIndex].targetnodes])
+        if isinstance(self.tasks[taskIndex], EdgeTask):
+            DSF = self.get_exts(FS)
+            freeout = np.array([(DSF/self.RLS - 1.)[te] for te in self.tasks[taskIndex].targetedges])
+        return freeout
     
     def loss(self, taskIndex, freeout, desiredout):
         #squared error of the outputs
@@ -285,10 +337,11 @@ class Elastic(object):
             return
         
         task = self.tasks[taskIndex]
-        _,tf = task.fixed
-        notfixed = np.invert(tf)
         diffouts = desiredout - freeout
-        np.place(diffouts, notfixed, 0.)
+        if isinstance(task, NodeTask):
+            _,tf = task.fixed
+            notfixed = np.invert(tf)
+            np.place(diffouts, notfixed, 0.)
         return np.sum(np.square(diffouts))
     
     def cost(self, freepos, clamppos):
@@ -337,11 +390,14 @@ class Elastic(object):
         task = self.tasks[taskIndex]
         
         inputs, outputs = task.IOpairs[pairIndex]
+        inputs = np.array(inputs)
+        outputs = np.array(outputs)
         
         self.initialize_step(**kwargs)
         eq = self.x0.reshape(self.NN,self.dim)
-        refin = [eq[sn] for sn in task.sourcenodes]
-        refout = [eq[tn] for tn in task.targetnodes]
+        if isinstance(task, NodeTask):
+            refin = [eq[sn] for sn in task.sourcenodes]
+            refout = [eq[tn] for tn in task.targetnodes]
         row = self.history.loc[self.currentstep]
         row.RLS = json.dumps(self.RLS.tolist())
         row.KS = json.dumps(self.KS.tolist())
@@ -351,14 +407,21 @@ class Elastic(object):
         FS = self.free_state(taskIndex,inputs)
         exts_f = self.get_exts(FS)
         row.exts_f = json.dumps(exts_f.tolist())
-        FSdim = FS.reshape(self.NN,self.dim)
-        row.free_in = json.dumps([FSdim[sn].tolist() for sn in task.sourcenodes])
-        freeout = np.array([FSdim[tn] for tn in task.targetnodes])
-        row.free_out = json.dumps([FSdim[tn].tolist() for tn in task.targetnodes])
+        
+        if isinstance(task, NodeTask):
+            FSdim = FS.reshape(self.NN,self.dim)
+            row.free_in = json.dumps([FSdim[sn].tolist() for sn in task.sourcenodes])
+            freeout = np.array([FSdim[tn] for tn in task.targetnodes])
+            row.free_out = json.dumps([FSdim[tn].tolist() for tn in task.targetnodes])
+        
+        if isinstance(task, EdgeTask):
+            freestrains = exts_f/self.RLS - 1.
+            row.free_in = json.dumps([freestrains[se].tolist() for se in task.sourceedges])
+            freeout = np.array([freestrains[te] for te in task.targetedges])
+            row.free_out = json.dumps([freestrains[te].tolist() for te in task.targetedges])
         
         #apply clamped state
         clampout = self._eta*outputs + (1-self._eta)*freeout
-        
         newIOpair = (inputs, clampout)
         
         CS = self.clamped_state(taskIndex,newIOpair)
@@ -367,10 +430,17 @@ class Elastic(object):
             self.stop_train = True
         exts_c = self.get_exts(CS)
         row.exts_c = json.dumps(exts_c.tolist())
-        CSdim = CS.reshape(self.NN,self.dim)
-        row.clamp_in = json.dumps([CSdim[sn].tolist() for sn in task.sourcenodes])
-        row.clamp_out = json.dumps([CSdim[tn].tolist() for tn in task.targetnodes])
         
+        if isinstance(task, NodeTask):
+            CSdim = CS.reshape(self.NN,self.dim)
+            row.clamp_in = json.dumps([CSdim[sn].tolist() for sn in task.sourcenodes])
+            row.clamp_out = json.dumps([CSdim[tn].tolist() for tn in task.targetnodes])
+            
+        if isinstance(task, EdgeTask):
+            clampstrains = exts_c/self.RLS - 1.
+            row.clamp_in = json.dumps([clampstrains[se].tolist() for se in task.sourceedges])
+            row.clamp_out = json.dumps([clampstrains[te].tolist() for te in task.targetedges])
+
         row.loss = self.loss(taskIndex, freeout, outputs)
         row.cost = self.cost(FS, CS)
         self.update(exts_f, exts_c, **kwargs)
@@ -384,6 +454,7 @@ class Elastic(object):
         
         if tasks is None:
             tasks = np.arange(len(self.tasks))
+        tasks = np.atleast_1d(tasks)
         
         totalTrainStep=0
         while (totalTrainStep < Nsteps) and self.stop_train==False:
@@ -392,20 +463,6 @@ class Elastic(object):
                     self.learning_step(taskIndex, pairIndex, **kwargs)
             totalTrainStep += 1
                     
-        
-#     def train(self, IOpairs = None, Nsteps = 100, **kwargs):
-#         #iopairs: list of tuples, length (# datapoints)
-#         #Nsteps: integer, how many times to cycle through all data points
-#         pairindex = 0
-        
-#         while (self.currentstep+1 < Nsteps*len(iopairs)) and self.stop_train==False:
-#             pairindex = pairindex % len(iopairs)
-#             self.learning_step(iopairs[pairindex], **kwargs)
-#             all_outs = []
-#             for inp in np.array(iopairs)[:,0]:
-#                 all_outs.append(self.free_output(inp).tolist())
-#             self.history.at[self.currentstep, 'all_outs'] = json.dumps(all_outs)
-#             pairindex += 1
 
 if __name__=='__main__':
     import warnings
