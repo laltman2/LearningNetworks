@@ -61,7 +61,7 @@ class Elastic(object):
         self.history = pd.DataFrame(columns=['step', 'task',
                                              'free_in', 'free_out', 'clamp_in', 'clamp_out', 
                                              'cost', 'loss',
-                                              'RLS', 'KS', 'exts_f', 'exts_c'])
+                                              'RLS', 'KS', 'exts_f', 'exts_c', 'FS', 'CS'])
         
         # initial equilibrium state
         self.x0 = self.eq_state(nodes)
@@ -445,6 +445,8 @@ class Elastic(object):
 
         row.loss = self.loss(taskIndex, freeout, outputs)
         row.cost = self.cost(FS, CS)
+        row.FS = json.dumps(FS.tolist())
+        row.CS = json.dumps(CS.tolist())
         self.update(exts_f, exts_c, **kwargs)
         
         self.history.loc[self.currentstep] = row #fix this later
