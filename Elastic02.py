@@ -88,7 +88,7 @@ class Elastic(object):
     def boundary(self):
         return self._boundary
         
-    @RLS.setter
+    @boundary.setter
     def boundary(self, value):
         self._boundary = value
         self.x0 = self.eq_state(self.x0)
@@ -215,7 +215,19 @@ class Elastic(object):
                         fixed.append(sn.index*self.dim + d)
 
             fixedNodes = np.concatenate(([bn.index for bn in self._boundary], [sn.index for sn in sources]), axis=0)
-            fixedPos = np.concatenate(([bn.position for bn in self._boundary], [sn.position for sn in sources]), axis=0)
+            if task.postype=='relative':
+                eq = self.x0.reshape(self.NN, self.dim)
+                refin = np.array([eq[sn] for sn in task.sourcenodes])
+                #print('Eqstate source: ', refin)
+                
+                sourcepos = []
+                for ix, sn in enumerate(sources):
+                    snpos = sn.position + refin[ix]
+                    sourcepos.append(snpos)
+                    #print('Node {} at position {}'.format(sn.index, snpos))
+            else:
+                sourcepos = [sn.position for sn in sources]
+            fixedPos = np.concatenate(([bn.position for bn in self._boundary], sourcepos), axis=0)
 
             params = [self._KS, self._RLS, self.EI, self.EJ, self.BIJ, self.dim, self.Epow, self.lnorm, fixed]
             FS = np.array(FreeState_node(self.x0, params, fixedNodes, fixedPos, JErg, JXGrad))
@@ -274,7 +286,25 @@ class Elastic(object):
                         fixed.append(tn.index*self.dim + d)
 
             fixedNodes = np.concatenate(([bn.index for bn in self._boundary], [sn.index for sn in sources], [tn.index for tn in targets]), axis=0)
-            fixedPos = np.concatenate(([bn.position for bn in self._boundary], [sn.position for sn in sources], [tn.position for tn in targets]), axis=0)
+            
+            if task.postype=='relative':
+                eq = self.x0.reshape(self.NN, self.dim)
+                refin = np.array([eq[sn] for sn in task.sourcenodes])
+                refout = np.array([eq[tn] for tn in task.targetnodes])
+                sourcepos = []
+                for ix, sn in enumerate(sources):
+                    snpos = sn.position + refin[ix]
+                    sourcepos.append(snpos)
+                    #print('Node {} at position {}'.format(sn.index, snpos))
+                targetpos = []
+                for ix, tn in enumerate(targets):
+                    tnpos = tn.position + refout[ix]
+                    targetpos.append(tnpos)
+                    #print('Node {} at position {}'.format(tn.index, tnpos))
+            else:
+                sourcepos = [sn.position for sn in sources]
+                targetpos = [tn.position for tn in targets]
+            fixedPos = np.concatenate(([bn.position for bn in self._boundary], sourcepos, targetpos), axis=0)
 
             if len(fixed) > (self.NN-1)*self.dim:
                 # if the system is (almost?) fully constrained, just use constraints as the position (compute won't work)
@@ -319,10 +349,15 @@ class Elastic(object):
     def free_output(self, taskIndex=0, inputs=None, pairIndex=0):
         #evaluate model (shortcut for trained models)
         FS = self.free_state(taskIndex, inputs, pairIndex)
-        if isinstance(self.tasks[taskIndex], NodeTask):
+        task = self.tasks[taskIndex]
+        if isinstance(task, NodeTask):
             FSdim = FS.reshape(self.NN, self.dim)
-            freeout = np.array([FSdim[tn] for tn in self.tasks[taskIndex].targetnodes])
-        if isinstance(self.tasks[taskIndex], EdgeTask):
+            freeout = np.array([FSdim[tn] for tn in task.targetnodes])
+            if task.postype == 'relative':
+                eq = self.x0.reshape(self.NN, self.dim)
+                refout = np.array([eq[tn] for tn in task.targetnodes])
+                freeout -= refout
+        if isinstance(task, EdgeTask):
             DSF = self.get_exts(FS)
             freeout = np.array([(DSF/self.RLS - 1.)[te] for te in self.tasks[taskIndex].targetedges])
         return freeout
@@ -396,10 +431,7 @@ class Elastic(object):
         outputs = np.array(outputs)
         
         self.initialize_step(**kwargs)
-        eq = self.x0.reshape(self.NN,self.dim)
-        if isinstance(task, NodeTask):
-            refin = [eq[sn] for sn in task.sourcenodes]
-            refout = [eq[tn] for tn in task.targetnodes]
+        #eq = self.x0.reshape(self.NN,self.dim)
         row = self.history.loc[self.currentstep]
         row.RLS = json.dumps(self.RLS.tolist())
         row.KS = json.dumps(self.KS.tolist())
@@ -414,6 +446,10 @@ class Elastic(object):
             FSdim = FS.reshape(self.NN,self.dim)
             row.free_in = json.dumps([FSdim[sn].tolist() for sn in task.sourcenodes])
             freeout = np.array([FSdim[tn] for tn in task.targetnodes])
+            if task.postype == 'relative':
+                eq = self.x0.reshape(self.NN, self.dim)
+                refout = np.array([eq[tn] for tn in task.targetnodes])
+                freeout -= refout
             row.free_out = json.dumps([FSdim[tn].tolist() for tn in task.targetnodes])
         
         if isinstance(task, EdgeTask):

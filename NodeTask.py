@@ -6,11 +6,12 @@ from LearningNetworks.Node import Node
 
 class NodeTask(object):
 
-    def __init__(self, sourcenodes=[], targetnodes=[], IOpairs=[], fixed=None, dim=2):
+    def __init__(self, sourcenodes=[], targetnodes=[], IOpairs=[], postype='absolute', fixed=None, dim=2):
         #source/targetnodes are indices
         #IOpair: input/output position pair
         #tuple of array of shape(# sources, dim), array of shape(#targets, dim)
         #IOpairs: list of IOpair tuples, length (# datapoints)
+        #postype: "absolute" or "relative". whether node positions are relative to native state or in absolute units
         #fixed: indicate which degrees of freedom to hold fixed
         #if None, default to all true. Otherwise,
         #tuple of array of shape(# sources, dim), array of shape(# targets, dim)
@@ -18,6 +19,8 @@ class NodeTask(object):
         self.sourcenodes = sourcenodes
         self.targetnodes = targetnodes
         self.dim = dim
+        
+        self.postype = postype
 
         if IOpairs:
             IOpairs = np.array(IOpairs)
